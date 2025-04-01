@@ -323,9 +323,9 @@ export class RAGSystem {
   }
 
   /**
-   * Get the next question for a user
-   */
-  async getNextQuestion(userId: string): Promise<Question> {
+ * Get the next question for a user
+ */
+async getNextQuestion(userId: string): Promise<Question> {
     // Get user session
     let session = await storageService.getUserSession(userId);
     
@@ -342,28 +342,61 @@ export class RAGSystem {
     const unansweredQuestions = stageQuestions.filter(q => !answeredQuestionIds.includes(q.id));
     
     if (unansweredQuestions.length > 0) {
-      // Return a random unanswered question
+      // Get the user's recent answers for context (up to 3)
+      const recentAnswers = session.answers
+        .slice(-3)
+        .map(answer => {
+          const question = allQuestions.find(q => q.id === answer.questionId);
+          return {
+            question: question?.text || '',
+            answer: answer.answer
+          };
+        });
+      
+      // If we have multiple questions and recent answers, use smart selection
+      if (unansweredQuestions.length > 1 && recentAnswers.length > 0) {
+        // Format candidates for the selection algorithm
+        const candidates = unansweredQuestions.map(q => ({
+          id: q.id,
+          text: q.text
+        }));
+        
+        // Find the most relevant question
+        const selectedId = await ollamaClient.findMostRelevantQuestion(candidates, recentAnswers);
+        const selectedQuestion = unansweredQuestions.find(q => q.id === selectedId);
+        
+        // Return the selected question or fall back to the first one
+        if (selectedQuestion) {
+          return selectedQuestion;
+        }
+      }
+      
+      // Fallback to a random unanswered question
       return unansweredQuestions[Math.floor(Math.random() * unansweredQuestions.length)];
     }
     
-    // If all questions for this stage are answered, either move to next stage or generate a new question
-    if (session.currentStage < MoralStage.UniversalPrinciples) {
+    // If all questions for this stage are answered, check stage progression
+    const progressCheck = await this.evaluateStageProgression(userId);
+    
+    if (progressCheck.readyToAdvance && session.currentStage < MoralStage.UniversalPrinciples) {
       // Advance to next stage and get a question from there
       session = await storageService.advanceUserStage(userId);
       return this.getNextQuestion(userId);
-    } else {
-      // We're at the highest stage, so generate a new question
-      const previousAnswers = session.answers.map(answer => {
-        const question = allQuestions.find(q => q.id === answer.questionId);
-        return {
-          question: question!.text,
-          answer: answer.answer
-        };
-      });
+    } else if (progressCheck.readyToAdvance) {
+      // We're at the highest stage and ready to advance, so generate a new question
+      const recentAnswers = session.answers
+        .slice(-5)
+        .map(answer => {
+          const question = allQuestions.find(q => q.id === answer.questionId);
+          return {
+            question: question?.text || '',
+            answer: answer.answer
+          };
+        });
       
       const newQuestionText = await ollamaClient.generateQuestion(
         session.currentStage,
-        previousAnswers
+        recentAnswers
       );
       
       // Create a new question
@@ -383,7 +416,90 @@ export class RAGSystem {
       await embeddingService.createQuestionEmbeddings([newQuestion]);
       
       return newQuestion;
+    } else {
+      // User is not ready to advance, return a message question
+      // We could either create a special question explaining what they need to do
+      // or just return an existing question they haven't fully resolved
+      
+      // For now, let's find an unresolved contradiction and return one of those questions
+      const unresolvedContradiction = session.contradictions.find(c => !c.resolved);
+      if (unresolvedContradiction) {
+        // Find a question from this contradiction
+        const questionId = unresolvedContradiction.questionIds[0];
+        const question = allQuestions.find(q => q.id === questionId);
+        
+        if (question) {
+          return {
+            ...question,
+            text: `Before continuing, please resolve the contradiction about "${question.text.substring(0, 50)}...". ${progressCheck.reason}`
+          };
+        }
+      }
+      
+      // If no unresolved contradictions, create a new question that explains
+      return {
+        id: uuidv4(),
+        text: `You need to complete more tasks before advancing: ${progressCheck.reason}. Please review your previous answers.`,
+        stage: session.currentStage,
+        tags: ["system", "progression"]
+      };
     }
+  }
+  
+  /**
+   * Evaluate if user is ready to advance to the next moral stage
+   */
+  async evaluateStageProgression(userId: string): Promise<{
+    readyToAdvance: boolean;
+    reason: string;
+  }> {
+    // Get user session
+    const session = await storageService.getUserSession(userId);
+    
+    if (!session) {
+      throw new Error(`User session not found: ${userId}`);
+    }
+    
+    // Get all questions
+    const questions = await storageService.loadQuestions();
+    
+    // Find questions from current stage that user has answered
+    const stageQuestions = questions.filter(q => q.stage === session.currentStage);
+    const answeredQuestionIds = session.answers.map(a => a.questionId);
+    const answeredStageQuestions = stageQuestions.filter(q => answeredQuestionIds.includes(q.id));
+    
+    // Criteria for advancement
+    // 1. User must have answered at least 3 questions in current stage
+    // 2. User must have resolved any contradictions in current stage
+    
+    // Check if enough questions answered
+    if (answeredStageQuestions.length < 3) {
+      return {
+        readyToAdvance: false,
+        reason: `Need to answer at least 3 questions in stage ${session.currentStage} (currently answered ${answeredStageQuestions.length})`
+      };
+    }
+    
+    // Check for unresolved contradictions in current stage
+    const currentStageAnswerIds = answeredStageQuestions.map(q => q.id);
+    const unresolvedContradictions = session.contradictions.filter(
+      c => 
+        c.questionIds.some(qId => currentStageAnswerIds.includes(qId)) &&
+        !c.resolved
+    );
+    
+    if (unresolvedContradictions.length > 0) {
+      return {
+        readyToAdvance: false,
+        reason: `Need to resolve ${unresolvedContradictions.length} contradiction(s) in current stage before advancing`
+      };
+    }
+    
+    // If user has answered enough questions and resolved contradictions, they can advance
+    return {
+      readyToAdvance: true,
+      reason: `Successfully completed stage ${session.currentStage}`
+    };
   }
 
   /**

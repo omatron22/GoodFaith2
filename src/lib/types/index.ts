@@ -9,12 +9,19 @@ export enum MoralStage {
     UniversalPrinciples = 6
   }
   
-  export interface Question {
-    id: string;
-    text: string;
-    stage: MoralStage;
-    relatedQuestionIds?: string[]; // Questions this might contradict with
-    tags: string[]; // Moral principles related to this question
+export interface UserSession {
+    userId: string;
+    answers: UserAnswer[];
+    contradictions: Contradiction[];
+    currentStage: MoralStage;
+    completedStages: MoralStage[];
+    analysis?: {
+      frameworkAlignment: Record<string, number>; // Framework ID to alignment score
+      keyPrinciples: string[];
+      consistencyScore: number;
+      metaPrinciples?: string[]; // Higher-order principles that guide reasoning
+      subtlePatterns?: string[]; // Subtle patterns in their moral reasoning
+    };
   }
   
   export interface UserAnswer {

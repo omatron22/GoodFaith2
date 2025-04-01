@@ -37,50 +37,70 @@ export class ContradictionService {
   }
 
   /**
-   * Extract whether analysis indicates a contradiction
+   * Extract whether analysis indicates a contradiction - enhanced version
    */
   private detectContradictionFromAnalysis(analysis: string): boolean {
-    // Simple heuristic - can be improved with more sophisticated NLP
+    // First, try to extract an explicit conclusion using regex
+    const conclusionMatch = analysis.match(/conclusion:?\s*(.*?)(?:\.|$)/i) || 
+                            analysis.match(/there (is|is not|isn't) a contradiction/i);
+    
+    if (conclusionMatch) {
+      const conclusion = conclusionMatch[0].toLowerCase();
+      
+      // Check for explicit positive indicators in the conclusion
+      if (/there is a contradiction|conclusion:\s*yes/i.test(conclusion)) {
+        return true;
+      }
+      
+      // Check for explicit negative indicators in the conclusion
+      if (/there (is not|isn't) a contradiction|no contradiction|conclusion:\s*no/i.test(conclusion)) {
+        return false;
+      }
+    }
+    
+    // If no clear conclusion, use a weighted scoring approach
     const lowerAnalysis = analysis.toLowerCase();
+    
+    // Calculate contradiction score with weighted indicators
+    let score = 0;
     
     // Check for positive indicators of contradiction
     const contradictionIndicators = [
-      "there is a contradiction",
-      "contradicts",
-      "inconsistent",
-      "inconsistency",
-      "contradictory",
-      "conflicts with",
-      "conflict between",
-      "cannot be reconciled",
-      "mutually exclusive",
-      "incompatible"
+      { pattern: /contradicts|contradiction/i, weight: 0.3 },
+      { pattern: /inconsistent|inconsistency/i, weight: 0.25 },
+      { pattern: /conflicts with|conflict between/i, weight: 0.2 },
+      { pattern: /cannot be reconciled/i, weight: 0.3 },
+      { pattern: /mutually exclusive|incompatible/i, weight: 0.3 },
+      { pattern: /tension between|at odds with/i, weight: 0.15 },
+      { pattern: /opposes|opposing/i, weight: 0.2 }
     ];
     
     // Check for negation indicators
     const negationIndicators = [
-      "no contradiction",
-      "not contradictory",
-      "consistent",
-      "no inconsistency",
-      "compatible",
-      "can be reconciled",
-      "not incompatible",
-      "not mutually exclusive"
+      { pattern: /no contradiction/i, weight: -0.4 },
+      { pattern: /not contradictory/i, weight: -0.3 },
+      { pattern: /consistent|consistency/i, weight: -0.25 },
+      { pattern: /compatible/i, weight: -0.2 },
+      { pattern: /can be reconciled/i, weight: -0.3 },
+      { pattern: /align|aligns with/i, weight: -0.15 },
+      { pattern: /complement|complementary/i, weight: -0.2 }
     ];
     
-    // Check if any contradiction indicators are present without negation
-    const hasContradiction = contradictionIndicators.some(indicator => 
-      lowerAnalysis.includes(indicator)
-    );
+    // Apply the patterns
+    for (const { pattern, weight } of contradictionIndicators) {
+      if (pattern.test(lowerAnalysis)) {
+        score += weight;
+      }
+    }
     
-    // Check if any negation indicators are present
-    const hasNegation = negationIndicators.some(indicator => 
-      lowerAnalysis.includes(indicator)
-    );
+    for (const { pattern, weight } of negationIndicators) {
+      if (pattern.test(lowerAnalysis)) {
+        score += weight;
+      }
+    }
     
-    // Return true if there are contradiction indicators without negation
-    return hasContradiction && !hasNegation;
+    // Use a threshold to determine if there's a contradiction
+    return score > 0.1; // Lower threshold for more sensitivity
   }
 
   /**
@@ -115,7 +135,7 @@ export class ContradictionService {
   ): Promise<Contradiction[]> {
     const contradictions: Contradiction[] = [];
     
-    // Check all related questions explicitly defined
+    // First check explicitly related questions
     if (currentQuestion.relatedQuestionIds && currentQuestion.relatedQuestionIds.length > 0) {
       const relatedQAs = previousQuestionsWithAnswers.filter(
         qa => currentQuestion.relatedQuestionIds!.includes(qa.question.id)
@@ -143,19 +163,26 @@ export class ContradictionService {
       }
     }
     
-    // Check for tags overlap (questions with similar moral principles)
-    const tagsOverlapQAs = previousQuestionsWithAnswers.filter(
-      qa => 
-        !currentQuestion.relatedQuestionIds?.includes(qa.question.id) && // Skip already checked
-        qa.question.tags.some(tag => currentQuestion.tags.includes(tag))
-    );
+    // Then check for tags overlap (questions with similar moral principles)
+    // Prioritize by tag overlap count for efficiency
+    const tagOverlapCounts = previousQuestionsWithAnswers
+      .filter(qa => !currentQuestion.relatedQuestionIds?.includes(qa.question.id)) // Skip already checked
+      .map(qa => ({
+        qa,
+        overlapCount: qa.question.tags.filter(tag => currentQuestion.tags.includes(tag)).length
+      }))
+      .filter(item => item.overlapCount > 0) // Must have at least one tag overlap
+      .sort((a, b) => b.overlapCount - a.overlapCount); // Sort by most overlap first
     
-    for (const overlapQA of tagsOverlapQAs) {
+    // Check the top 3 most relevant by tags (or fewer if there aren't that many)
+    const topOverlaps = tagOverlapCounts.slice(0, 3);
+    
+    for (const { qa } of topOverlaps) {
       const { isContradiction, explanation } = await this.analyzeContradiction(
         currentQuestion,
         currentAnswer,
-        overlapQA.question,
-        overlapQA.answer
+        qa.question,
+        qa.answer
       );
       
       if (isContradiction) {
@@ -163,8 +190,8 @@ export class ContradictionService {
           this.createContradiction(
             currentQuestion,
             currentAnswer,
-            overlapQA.question,
-            overlapQA.answer,
+            qa.question,
+            qa.answer,
             explanation
           )
         );
