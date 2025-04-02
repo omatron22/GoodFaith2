@@ -5,12 +5,15 @@ import { OllamaRequest, OllamaResponse } from '../types';
 const REASONING_MODEL = 'deepseek-coder:latest';
 const LIGHTWEIGHT_MODEL = 'mistral:latest';
 
+// Define a type for cache values
+type CacheValue = OllamaResponse | number[];
+
 /**
  * Client for interacting with Ollama models
  */
 export class OllamaClient {
   private baseUrl: string;
-  private cache: Map<string, any>;
+  private cache: Map<string, CacheValue>;
 
   constructor(baseUrl: string = 'http://localhost:11434/api') {
     this.baseUrl = baseUrl;
@@ -26,7 +29,11 @@ export class OllamaClient {
     
     // Check cache first
     if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey);
+      const cachedValue = this.cache.get(cacheKey);
+      // Ensure the cached value is of the correct type
+      if (cachedValue && 'response' in cachedValue) {
+        return cachedValue as OllamaResponse;
+      }
     }
     
     try {
@@ -64,7 +71,11 @@ export class OllamaClient {
     
     // Check cache first
     if (this.cache.has(cacheKey)) {
-      return this.cache.get(cacheKey);
+      const cachedValue = this.cache.get(cacheKey);
+      // Ensure the cached value is of the correct type
+      if (cachedValue && Array.isArray(cachedValue)) {
+        return cachedValue as number[];
+      }
     }
     
     try {

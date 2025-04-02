@@ -127,6 +127,7 @@ export class StorageService {
     try {
       const data = await fs.readFile(userFilePath, 'utf-8');
       return JSON.parse(data);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
       // Return null if user doesn't exist
       return null;
@@ -167,11 +168,7 @@ export class StorageService {
    * Add answer to user session
    */
   async addUserAnswer(userId: string, answer: UserAnswer): Promise<UserSession> {
-    let session = await this.getUserSession(userId);
-    
-    if (!session) {
-      session = await this.createUserSession(userId);
-    }
+    const session = await this.getUserSession(userId) || await this.createUserSession(userId);
     
     session.answers.push(answer);
     await this.saveUserSession(session);
@@ -183,7 +180,7 @@ export class StorageService {
    * Add contradiction to user session
    */
   async addContradiction(userId: string, contradiction: Contradiction): Promise<UserSession> {
-    let session = await this.getUserSession(userId);
+    const session = await this.getUserSession(userId);
     
     if (!session) {
       throw new Error(`User session not found: ${userId}`);
@@ -201,9 +198,9 @@ export class StorageService {
   async resolveContradiction(
     userId: string,
     contradictionId: string,
-    resolution: Contradiction['resolution']
+    resolution: NonNullable<Contradiction['resolution']>
   ): Promise<UserSession> {
-    let session = await this.getUserSession(userId);
+    const session = await this.getUserSession(userId);
     
     if (!session) {
       throw new Error(`User session not found: ${userId}`);
@@ -241,7 +238,7 @@ export class StorageService {
     userId: string,
     analysis: UserSession['analysis']
   ): Promise<UserSession> {
-    let session = await this.getUserSession(userId);
+    const session = await this.getUserSession(userId);
     
     if (!session) {
       throw new Error(`User session not found: ${userId}`);
@@ -257,7 +254,7 @@ export class StorageService {
    * Advance user to next stage
    */
   async advanceUserStage(userId: string): Promise<UserSession> {
-    let session = await this.getUserSession(userId);
+    const session = await this.getUserSession(userId);
     
     if (!session) {
       throw new Error(`User session not found: ${userId}`);

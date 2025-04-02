@@ -323,101 +323,104 @@ Respond with either "YES" or "NO" followed by a brief explanation.
  * Generate feedback based on the user's moral framework analysis
  */
 async generateFeedback(userId: string): Promise<string> {
-    // Get user session and analysis
-    const session = await storageService.getUserSession(userId);
-    
-    if (!session) {
-      throw new Error(`User session not found: ${userId}`);
-    }
-    
-    // If analysis doesn't exist, generate it first
-    if (!session.analysis) {
-      session.analysis = await this.analyzeUserFramework(userId);
-      await storageService.updateSessionAnalysis(userId, session.analysis);
-    }
-    
-    // Now session.analysis is guaranteed to exist
-    const analysis = session.analysis; // Create a non-null reference
-    
-    // Get frameworks and Kohlberg stages
-    const frameworks = await storageService.loadFrameworks();
-    const kohlbergStages = await storageService.loadKohlbergStages();
-    const questions = await storageService.loadQuestions();
-    
-    // Create context for feedback generation
-    const topFramework = Object.entries(analysis.frameworkAlignment)
-      .sort((a, b) => b[1] - a[1])[0];
-    
-    const frameworkInfo = frameworks.find(f => f.id === topFramework[0]);
-    const highestStage = Math.max(...session.completedStages, session.currentStage);
-    const stageInfo = kohlbergStages.find(s => s.stage === highestStage);
-    
-    // Include additional context about secondary frameworks
-    const secondaryFrameworks = Object.entries(analysis.frameworkAlignment)
-      .sort((a, b) => b[1] - a[1])
-      .slice(1, 3) // Get 2nd and 3rd highest
-      .map(([id, score]) => {
-        const fw = frameworks.find(f => f.id === id);
-        return {
-          name: fw?.name || id,
-          score
-        };
-      });
-    
-    // Include information about resolved contradictions
-    const resolvedContradictions = session.contradictions.filter(c => c.resolved);
-    const contradictionPatterns = resolvedContradictions.length > 0 ? 
-      this.analyzeContradictionPatterns(resolvedContradictions, questions) : [];
-    
-    // Generate personalized feedback
-    const prompt = `
-  You are analyzing the moral reasoning of a user who has completed a moral framework questionnaire.
+  // Get user session and analysis
+  const session = await storageService.getUserSession(userId);
   
-  Based on their answers, they align most strongly with ${frameworkInfo?.name} (${topFramework[1]}% alignment).
-  They also show elements of ${secondaryFrameworks.map(f => `${f.name} (${f.score}%)`).join(' and ')}.
-  
-  Their key moral principles appear to be: ${analysis.keyPrinciples.join(', ')}.
-  ${analysis.metaPrinciples && analysis.metaPrinciples.length > 0 ? 
-    `At a meta level, their reasoning seems guided by: ${analysis.metaPrinciples.join(', ')}.` : ''}
-  
-  Their moral reasoning consistency score is ${analysis.consistencyScore}/100.
-  They have reached Stage ${highestStage} (${stageInfo?.name}) in Kohlberg's stages of moral development.
-  They encountered ${session.contradictions.length} contradictions in their reasoning and resolved ${resolvedContradictions.length} of them.
-  
-  ${contradictionPatterns.length > 0 ? 
-    `When resolving contradictions, they tended to: ${contradictionPatterns.join(', ')}.` : ''}
-  
-  Please provide a personalized, thoughtful analysis (about 250-300 words) of their moral framework that:
-  1. Acknowledges their strengths and consistencies
-  2. Insightfully identifies the core of their moral reasoning
-  3. Gently identifies areas where they might reflect further
-  4. Offers guidance on how they might continue to develop their moral thinking
-  
-  Be supportive, not judgmental. Focus on growth rather than evaluation. Avoid philosophical jargon and use clear, accessible language. Make connections between their primary ethical frameworks and principles. If they seem to have contradictions, suggest ways to harmonize their views.
-  `;
-  
-    try {
-      const feedbackResponse = await ollamaClient.generate({
-        model: 'deepseek-coder:latest',
-        prompt,
-        options: {
-          temperature: 0.7,
-          max_tokens: 700
-        }
-      });
-      
-      return feedbackResponse.response;
-    } catch (error) {
-      console.error("Error generating feedback:", error);
-      return "Unable to generate personalized feedback at this time. Your results have been saved and you can check back later.";
-    }
+  if (!session) {
+    throw new Error(`User session not found: ${userId}`);
   }
+  
+  // If analysis doesn't exist, generate it first
+  if (!session.analysis) {
+    session.analysis = await this.analyzeUserFramework(userId);
+    await storageService.updateSessionAnalysis(userId, session.analysis);
+  }
+  
+  // At this point, we can assert that analysis is defined
+  // TypeScript's type narrowing doesn't persist across await boundaries, so we need a non-null assertion
+  const analysis = session.analysis!;
+  
+  // Get frameworks and Kohlberg stages
+  const frameworks = await storageService.loadFrameworks();
+  const kohlbergStages = await storageService.loadKohlbergStages();
+  const questions = await storageService.loadQuestions();
+  
+  // Create context for feedback generation
+  const topFramework = Object.entries(analysis.frameworkAlignment)
+    .sort((a, b) => b[1] - a[1])[0];
+  
+  const frameworkInfo = frameworks.find(f => f.id === topFramework[0]);
+  const highestStage = Math.max(...session.completedStages, session.currentStage);
+  const stageInfo = kohlbergStages.find(s => s.stage === highestStage);
+  
+  // Include additional context about secondary frameworks
+  const secondaryFrameworks = Object.entries(analysis.frameworkAlignment)
+    .sort((a, b) => b[1] - a[1])
+    .slice(1, 3) // Get 2nd and 3rd highest
+    .map(([id, score]) => {
+      const fw = frameworks.find(f => f.id === id);
+      return {
+        name: fw?.name || id,
+        score
+      };
+    });
+  
+  // Include information about resolved contradictions
+  const resolvedContradictions = session.contradictions.filter(c => c.resolved);
+  const contradictionPatterns = resolvedContradictions.length > 0 ? 
+    this.analyzeContradictionPatterns(resolvedContradictions, questions) : [];
+  
+  // Generate personalized feedback
+  const prompt = `
+You are analyzing the moral reasoning of a user who has completed a moral framework questionnaire.
+
+Based on their answers, they align most strongly with ${frameworkInfo?.name} (${topFramework[1]}% alignment).
+They also show elements of ${secondaryFrameworks.map(f => `${f.name} (${f.score}%)`).join(' and ')}.
+
+Their key moral principles appear to be: ${analysis.keyPrinciples.join(', ')}.
+${analysis.metaPrinciples && analysis.metaPrinciples.length > 0 ? 
+  `At a meta level, their reasoning seems guided by: ${analysis.metaPrinciples.join(', ')}.` : ''}
+
+Their moral reasoning consistency score is ${analysis.consistencyScore}/100.
+They have reached Stage ${highestStage} (${stageInfo?.name}) in Kohlberg's stages of moral development.
+They encountered ${session.contradictions.length} contradictions in their reasoning and resolved ${resolvedContradictions.length} of them.
+
+${contradictionPatterns.length > 0 ? 
+  `When resolving contradictions, they tended to: ${contradictionPatterns.join(', ')}.` : ''}
+
+Please provide a personalized, thoughtful analysis (about 250-300 words) of their moral framework that:
+1. Acknowledges their strengths and consistencies
+2. Insightfully identifies the core of their moral reasoning
+3. Gently identifies areas where they might reflect further
+4. Offers guidance on how they might continue to develop their moral thinking
+
+Be supportive, not judgmental. Focus on growth rather than evaluation. Avoid philosophical jargon and use clear, accessible language. Make connections between their primary ethical frameworks and principles. If they seem to have contradictions, suggest ways to harmonize their views.
+`;
+
+  try {
+    const feedbackResponse = await ollamaClient.generate({
+      model: 'deepseek-coder:latest',
+      prompt,
+      options: {
+        temperature: 0.7,
+        max_tokens: 700
+      }
+    });
+    
+    return feedbackResponse.response;
+  } catch (error) {
+    console.error("Error generating feedback:", error);
+    return "Unable to generate personalized feedback at this time. Your results have been saved and you can check back later.";
+  }
+}
   
   /**
    * Analyze patterns in how the user resolves contradictions
    */
+  
   private analyzeContradictionPatterns(
     resolvedContradictions: Contradiction[],
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     questions: Question[]
   ): string[] {
     if (resolvedContradictions.length < 2) {
