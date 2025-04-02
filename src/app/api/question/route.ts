@@ -1,7 +1,6 @@
 // /app/api/question/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { ragSystem } from '@/lib/rag';
-import { storageService } from '@/lib/core/storage';
 import { v4 as uuidv4 } from 'uuid';
 
 export async function GET(req: NextRequest) {

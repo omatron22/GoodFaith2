@@ -1,5 +1,5 @@
 // /lib/core/analysis.ts
-import { MoralFramework, Question, UserAnswer, UserSession } from '../types';
+import { MoralFramework, Question, UserAnswer, UserSession, Contradiction } from '../types';
 import { ollamaClient } from '../rag/ollama';
 import { storageService } from './storage';
 
@@ -319,10 +319,10 @@ Respond with either "YES" or "NO" followed by a brief explanation.
     };
   }
 
-  /**
-   * Generate feedback based on the user's moral framework analysis
-   */
-  async generateFeedback(userId: string): Promise<string> {
+/**
+ * Generate feedback based on the user's moral framework analysis
+ */
+async generateFeedback(userId: string): Promise<string> {
     // Get user session and analysis
     const session = await storageService.getUserSession(userId);
     
@@ -330,18 +330,22 @@ Respond with either "YES" or "NO" followed by a brief explanation.
       throw new Error(`User session not found: ${userId}`);
     }
     
+    // If analysis doesn't exist, generate it first
     if (!session.analysis) {
-      // Generate analysis if it doesn't exist
       session.analysis = await this.analyzeUserFramework(userId);
       await storageService.updateSessionAnalysis(userId, session.analysis);
     }
     
+    // Now session.analysis is guaranteed to exist
+    const analysis = session.analysis; // Create a non-null reference
+    
     // Get frameworks and Kohlberg stages
     const frameworks = await storageService.loadFrameworks();
     const kohlbergStages = await storageService.loadKohlbergStages();
+    const questions = await storageService.loadQuestions();
     
     // Create context for feedback generation
-    const topFramework = Object.entries(session.analysis.frameworkAlignment)
+    const topFramework = Object.entries(analysis.frameworkAlignment)
       .sort((a, b) => b[1] - a[1])[0];
     
     const frameworkInfo = frameworks.find(f => f.id === topFramework[0]);
@@ -349,7 +353,7 @@ Respond with either "YES" or "NO" followed by a brief explanation.
     const stageInfo = kohlbergStages.find(s => s.stage === highestStage);
     
     // Include additional context about secondary frameworks
-    const secondaryFrameworks = Object.entries(session.analysis.frameworkAlignment)
+    const secondaryFrameworks = Object.entries(analysis.frameworkAlignment)
       .sort((a, b) => b[1] - a[1])
       .slice(1, 3) // Get 2nd and 3rd highest
       .map(([id, score]) => {
@@ -367,31 +371,31 @@ Respond with either "YES" or "NO" followed by a brief explanation.
     
     // Generate personalized feedback
     const prompt = `
-You are analyzing the moral reasoning of a user who has completed a moral framework questionnaire.
-
-Based on their answers, they align most strongly with ${frameworkInfo?.name} (${topFramework[1]}% alignment).
-They also show elements of ${secondaryFrameworks.map(f => `${f.name} (${f.score}%)`).join(' and ')}.
-
-Their key moral principles appear to be: ${session.analysis.keyPrinciples.join(', ')}.
-${session.analysis.metaPrinciples && session.analysis.metaPrinciples.length > 0 ? 
-  `At a meta level, their reasoning seems guided by: ${session.analysis.metaPrinciples.join(', ')}.` : ''}
-
-Their moral reasoning consistency score is ${session.analysis.consistencyScore}/100.
-They have reached Stage ${highestStage} (${stageInfo?.name}) in Kohlberg's stages of moral development.
-They encountered ${session.contradictions.length} contradictions in their reasoning and resolved ${resolvedContradictions.length} of them.
-
-${contradictionPatterns.length > 0 ? 
-  `When resolving contradictions, they tended to: ${contradictionPatterns.join(', ')}.` : ''}
-
-Please provide a personalized, thoughtful analysis (about 250-300 words) of their moral framework that:
-1. Acknowledges their strengths and consistencies
-2. Insightfully identifies the core of their moral reasoning
-3. Gently identifies areas where they might reflect further
-4. Offers guidance on how they might continue to develop their moral thinking
-
-Be supportive, not judgmental. Focus on growth rather than evaluation. Avoid philosophical jargon and use clear, accessible language. Make connections between their primary ethical frameworks and principles. If they seem to have contradictions, suggest ways to harmonize their views.
-`;
-
+  You are analyzing the moral reasoning of a user who has completed a moral framework questionnaire.
+  
+  Based on their answers, they align most strongly with ${frameworkInfo?.name} (${topFramework[1]}% alignment).
+  They also show elements of ${secondaryFrameworks.map(f => `${f.name} (${f.score}%)`).join(' and ')}.
+  
+  Their key moral principles appear to be: ${analysis.keyPrinciples.join(', ')}.
+  ${analysis.metaPrinciples && analysis.metaPrinciples.length > 0 ? 
+    `At a meta level, their reasoning seems guided by: ${analysis.metaPrinciples.join(', ')}.` : ''}
+  
+  Their moral reasoning consistency score is ${analysis.consistencyScore}/100.
+  They have reached Stage ${highestStage} (${stageInfo?.name}) in Kohlberg's stages of moral development.
+  They encountered ${session.contradictions.length} contradictions in their reasoning and resolved ${resolvedContradictions.length} of them.
+  
+  ${contradictionPatterns.length > 0 ? 
+    `When resolving contradictions, they tended to: ${contradictionPatterns.join(', ')}.` : ''}
+  
+  Please provide a personalized, thoughtful analysis (about 250-300 words) of their moral framework that:
+  1. Acknowledges their strengths and consistencies
+  2. Insightfully identifies the core of their moral reasoning
+  3. Gently identifies areas where they might reflect further
+  4. Offers guidance on how they might continue to develop their moral thinking
+  
+  Be supportive, not judgmental. Focus on growth rather than evaluation. Avoid philosophical jargon and use clear, accessible language. Make connections between their primary ethical frameworks and principles. If they seem to have contradictions, suggest ways to harmonize their views.
+  `;
+  
     try {
       const feedbackResponse = await ollamaClient.generate({
         model: 'deepseek-coder:latest',

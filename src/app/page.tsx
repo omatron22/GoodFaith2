@@ -1,8 +1,41 @@
-// /app/page.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { Question, Contradiction, MoralStage } from '@/lib/types';
+
+// Define interface for Analysis data to replace 'any'
+interface AnalysisData {
+  userId: string;
+  analysis: {
+    frameworkAlignment: Record<string, number>;
+    keyPrinciples: string[];
+    consistencyScore: number;
+    metaPrinciples?: string[];
+    subtlePatterns?: string[];
+  };
+  feedback: string;
+  statistics: {
+    totalQuestions: number;
+    totalContradictions: number;
+    resolvedContradictions: number;
+    highestStage: number;
+  };
+  frameworks: Array<{
+    id: string;
+    name: string;
+    description: string;
+    principles: string[];
+    keyThinkers: string[];
+  }>;
+  kohlbergStages: Array<{
+    stage: number;
+    name: string;
+    description: string;
+    reasoning: string;
+    exampleDilemmas: string[];
+  }>;
+}
 
 export default function Home() {
   // User state
@@ -23,9 +56,11 @@ export default function Home() {
   const [overwrittenQuestionId, setOverwrittenQuestionId] = useState<string | null>(null);
   const [newAnswer, setNewAnswer] = useState('');
   
-  // Analysis state
+  // Analysis state - replace 'any' with proper type
   const [showAnalysis, setShowAnalysis] = useState(false);
-  const [analysis, setAnalysis] = useState<any>(null);
+  const [analysis, setAnalysis] = useState<AnalysisData | null>(null);
+  
+  // Rest of your component remains the same
   
   // Initialize and get first question
   useEffect(() => {
@@ -263,7 +298,7 @@ export default function Home() {
                 {Object.entries(analysis.analysis.frameworkAlignment)
                   .sort(([, a], [, b]) => (b as number) - (a as number))
                   .map(([frameworkId, score]) => {
-                    const framework = analysis.frameworks.find((f: any) => f.id === frameworkId);
+                    const framework = analysis.frameworks.find((f) => f.id === frameworkId);
                     return (
                       <li key={frameworkId} className="flex items-center">
                         <div className="w-full">
@@ -296,8 +331,8 @@ export default function Home() {
               <ul className="space-y-2">
                 <li><strong>Questions Answered:</strong> {analysis.statistics.totalQuestions}</li>
                 <li><strong>Highest Stage Reached:</strong> {analysis.statistics.highestStage} - {
-                  analysis.kohlbergStages.find((s: any) => s.stage === analysis.statistics.highestStage)?.name
-                }</li>
+analysis.kohlbergStages.find((s) => s.stage === analysis.statistics.highestStage)?.name
+}</li>
                 <li><strong>Contradictions Encountered:</strong> {analysis.statistics.totalContradictions}</li>
                 <li><strong>Contradictions Resolved:</strong> {analysis.statistics.resolvedContradictions}</li>
                 <li><strong>Consistency Score:</strong> {analysis.analysis.consistencyScore}/100</li>
@@ -506,13 +541,13 @@ export default function Home() {
         <div className="bg-white rounded-lg shadow-lg p-6">
           <h2 className="text-xl font-semibold mb-4">About Good Faith</h2>
           <p className="mb-2">
-            This application tests the consistency of your moral reasoning through a series of questions based on Lawrence Kohlberg's stages of moral development.
+            This application tests the consistency of your moral reasoning through a series of questions based on Lawrence Kohlberg&apos;s stages of moral development.
           </p>
           <p className="mb-2">
             As you answer questions, the system will identify any contradictions in your moral reasoning and give you the opportunity to resolve them.
           </p>
           <p>
-            At the end, you'll receive an analysis of your moral framework, including your alignment with various ethical theories and the key principles that guide your thinking.
+            At the end, you&apos;ll receive an analysis of your moral framework, including your alignment with various ethical theories and the key principles that guide your thinking.
           </p>
         </div>
       </div>
