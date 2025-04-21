@@ -1,222 +1,252 @@
-# Good Faith
+# Good Faith - Intelligent Moral Framework Analysis
 
-A philosophical application that evaluates the consistency of your moral framework.
+A philosophical application that evaluates the consistency of users' moral reasoning through dynamic, LLM-generated questioning based on Kohlberg's stages of moral development.
 
 ## Project Overview
 
-Good Faith is a Next.js application that allows users to explore and test the consistency of their moral reasoning. Based on Lawrence Kohlberg's stages of moral development, the application presents users with moral questions and dilemmas, detects contradictions in their responses, and provides an analysis of their moral framework.
+Good Faith is a Next.js application that uses a Neo4j-backed graph system to explore users' moral reasoning. The application leverages LLMs to generate intelligent, personalized questions that probe for contradictions and provide deep analysis of users' moral frameworks.
 
-## Core Components
+## Core Architecture
 
-### GraphRAG System
+### 1. GraphRAG System (Neo4j-based)
 
-The Graph-based Retrieval-Augmented Generation (GraphRAG) system is the core of the application. It:
+The Graph-based RAG system is the core engine that:
+- Dynamically generates questions using LLM based on user responses and current stage
+- Represents moral questions, answers, principles, and stages in a connected graph
+- Detects contradictions through logical analysis and graph relationships
+- Maintains conversation continuity while exploring potential blind spots
+- Tracks user progression through Kohlberg's stages
 
-1. Represents moral questions, frameworks, and user responses as a knowledge graph
-2. Utilizes graph relationships to find contradictions and connections between responses
-3. Navigates through Kohlberg's stages using graph traversal algorithms
-4. Delegates complex reasoning tasks to the DeepSeek model
-5. Uses Phi for lightweight operations like embedding generation
+### 2. Knowledge Graph Structure
 
-### Knowledge Graph Structure
+**Node Types:**
+- **Question Nodes**: LLM-generated questions with properties:
+  - id: unique identifier
+  - text: the question content
+  - stage: Kohlberg stage (1-6)
+  - type: 'generated' or 'seed' (initial questions)
+  - context: array of previous answers that influenced this question
+  - generatedForUser: userId
+  
+- **Answer Nodes**: User responses with properties:
+  - id: unique identifier
+  - text: the answer content
+  - userId: user who provided the answer
+  - timestamp: when the answer was submitted
+  - modified: boolean indicating if this was modified after a contradiction
+  - previousVersion: link to previous answer if modified
+  
+- **Principle Nodes**: Extracted moral principles from answers
+  - id: unique identifier
+  - text: the principle description
+  - derivedFrom: array of answer ids
+  
+- **Framework Nodes**: Philosophical frameworks (deontological, utilitarian, etc.)
+  - id: unique identifier
+  - name: framework name
+  - description: brief explanation
+  - keyThinkers: array of philosopher names
+  
+- **Stage Nodes**: Kohlberg's moral development stages (1-6)
+  - id: stage number
+  - name: stage name
+  - description: stage characteristics
+  - requiredAnswers: minimum answers needed to progress
 
-The graph consists of the following nodes and relationships:
+**Relationship Types:**
+- **ANSWERS**: Links user's answer to a question
+- **CONTRADICTS**: Links two contradictory answers with properties:
+  - explanation: why they contradict
+  - resolved: boolean
+  - resolution: explanation if resolved
+- **BELONGS_TO**: Links questions to Kohlberg stages
+- **ALIGNS_WITH**: Links answers to philosophical frameworks/principles
+- **FOLLOWS**: Sequential relationship between stages
+- **PRECEDES**: Links question to answers that influenced its generation
+- **MODIFIES**: Links updated answer to its previous version
 
-* **Question Nodes**: Represent individual moral questions
-* **Answer Nodes**: User responses linked to questions
-* **Framework Nodes**: Philosophical frameworks (deontological, utilitarian, etc.)
-* **Principle Nodes**: Core moral principles connected to frameworks
-* **Stage Nodes**: Kohlberg's moral development stages
+### 3. LLM Integration
 
-Relationships include:
-* **CONTRADICTS**: Links potentially contradictory questions/answers
-* **BELONGS_TO**: Connects questions to moral stages
-* **ALIGNS_WITH**: Links answers to frameworks or principles
-* **FOLLOWS**: Indicates progression between stages
+**DeepSeek Coder Model** handles:
+- Dynamic question generation based on conversation context
+- Contradiction detection through logical analysis
+- Framework alignment analysis
+- Feedback generation
 
-### Data Storage
+**Question Generation Strategy:**
+- Analyze user's previous answers to identify patterns
+- Consider current Kohlberg stage requirements
+- Target potential blind spots and inconsistencies
+- Use simple, digestible language and relatable scenarios
+- Avoid redundancy while covering comprehensive moral ground
 
-The project uses a hybrid storage system:
-* Graph database representation (in-memory for MVP)
-* File-based persistence for portability
-* Optional extension to Neo4j or other graph databases
+### 4. Contradiction Detection System
 
-### LLM Integration
-
-The application integrates with Ollama to use:
-* DeepSeek Coder model for complex reasoning tasks
-* Phi model for lightweight operations like embeddings
+- Uses truth table logic to identify direct and implied contradictions
+- Considers transitive relationships (A→B, B→C, therefore A→C)
+- Allows users to explain or modify their positions
+- Tracks all modifications for final analysis
 
 ## Project Structure
 
 ```
 /good-faith
-  /app                     # Next.js application
-    /api                   # API endpoints 
-      /question            # Get next question
-      /answer              # Submit answer
-      /resolution          # Resolve contradiction
-      /analysis            # Get moral framework analysis
-    page.tsx               # Main application page
-  /lib                     # Core library code
-    /graph                 # GraphRAG system
-      index.ts             # Main GraphRAG implementation
-      knowledge-graph.ts   # Graph data structure
-      traversal.ts         # Graph traversal algorithms
-      ollama.ts            # Ollama client for LLM integration
-    /core                  # Core business logic
-      contradictions.ts    # Contradiction detection
-      analysis.ts          # Moral framework analysis
-      storage.ts           # File-based storage
-    /types                 # TypeScript definitions
-  /hooks                   # React hooks
-    useQuestions.ts        # Question retrieval hook
-    useAnalysis.ts         # Analysis hook
-  /data                    # Data storage
-    /knowledge-base        # Static data
-    /graph                 # Graph representation persistence
-    /users                 # User session data
+  /src
+    /app                       # Next.js application
+      /api                     # API endpoints 
+        /question              # Get LLM-generated question
+        /answer                # Submit answer & check contradictions
+        /resolution            # Resolve contradiction
+        /analysis              # Get moral framework analysis
+        /stage                 # Manage stage progression
+      page.tsx                 # Main application page
+    /lib                       # Core library code
+      /graph                   # GraphRAG system
+        index.ts               # Main GraphRAG orchestrator
+        neo4j-client.ts        # Neo4j connection and queries
+        nodes/                 # Node type definitions
+          question.ts
+          answer.ts
+          principle.ts
+          framework.ts
+          stage.ts
+        relationships/         # Relationship definitions
+          index.ts
+          contradicts.ts
+          belongs-to.ts
+          aligns-with.ts
+        queries/               # Neo4j query templates
+          traversal.ts         # Graph traversal queries
+          contradiction.ts     # Contradiction detection queries
+          stage.ts            # Stage progression queries
+      /llm                     # LLM integration
+        ollama-client.ts       # Ollama API client
+        question-generator.ts  # Dynamic question generation
+        contradiction-analyzer.ts # Contradiction detection
+        framework-analyzer.ts  # Framework alignment analysis
+      /core                    # Core business logic
+        session-manager.ts     # User session management
+        stage-progression.ts   # Stage advancement logic
+        principle-extractor.ts # Extract principles from answers
+      /types                   # TypeScript definitions
+        index.ts
+    /hooks                     # React hooks
+      useQuestion.ts           # Question generation hook
+      useContradiction.ts      # Contradiction handling hook
+      useAnalysis.ts          # Analysis hook
+  /scripts                     # Utility scripts
+    init-neo4j.ts             # Initialize Neo4j schema
+    seed-graph.ts             # Seed initial questions/frameworks
+  /data                        # Data storage
+    /seed                      # Initial data
+      frameworks.json          # Philosophical frameworks
+      kohlberg-stages.json     # Stage definitions
 ```
 
 ## Key Features
 
-1. **Graph-Based Question Navigation**: Questions are recommended based on graph relationships, navigating through Kohlberg's stages of moral development.
-2. **Semantic Contradiction Detection**: The system identifies logical inconsistencies between user's answers using both explicit graph relationships and reasoning model analysis.
-3. **Resolution Process**: When contradictions are detected, users can resolve them by explaining their reasoning and choosing which answer to modify.
-4. **Framework Analysis**: At the end, users receive an analysis of their moral framework, including alignment with established philosophical frameworks.
+### 1. Dynamic Question Generation
+- LLM generates personalized questions based on:
+  - User's previous answers
+  - Current moral development stage
+  - Identified patterns and blind spots
+  - Contradiction potential
+- Questions avoid jargon, focusing on relatable scenarios
+
+### 2. Intelligent Contradiction Detection
+- Identifies direct contradictions
+- Detects implied contradictions through logical inference
+- Provides explanation in accessible language
+- Allows resolution through explanation or answer modification
+
+### 3. Stage Progression System
+- Minimum 3 answers per stage (more if needed)
+- Must resolve all contradictions before advancing
+- Evaluates consistency within each stage
+- Provides feedback on progression
+
+### 4. Comprehensive Analysis
+- Alignment with philosophical frameworks
+- Key moral principles identification
+- Consistency score
+- Growth areas and strengths
+- Philosophical reading recommendations
+
+## Development Phases
+
+### Phase 1: Core Engine (Current Priority)
+1. Set up Neo4j database and connection
+2. Implement basic graph structure
+3. Create LLM integration for question generation
+4. Build contradiction detection system
+5. Develop stage progression logic
+
+### Phase 2: Intelligence Enhancement
+1. Refine question generation algorithms
+2. Improve contradiction detection accuracy
+3. Enhance framework analysis
+4. Add principle extraction
+
+### Phase 3: UI and User Experience (Later)
+1. Create intuitive user interface
+2. Add graph visualizations
+3. Implement user profiles and sessions
+4. Build collaborative features
+
+### Phase 4: Scale and Optimization (Future)
+1. Optimize for concurrent users
+2. Add caching mechanisms
+3. Implement analytics
+4. Support multiple languages
 
 ## Getting Started
 
 ### Prerequisites
-
-* Node.js (v18 or higher)
-* Ollama installed and running locally with the following models:
-   * `deepseek-coder:latest` - For reasoning operations
-   * `phi:latest` - For lightweight operations
+- Node.js (v18 or higher)
+- Neo4j Database (v4.4 or higher)
+- Ollama with DeepSeek Coder model
 
 ### Installation
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Set up Neo4j database
+4. Configure environment variables
+5. Initialize the graph: `npm run init-graph`
+6. Start development server: `npm run dev`
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/good-faith.git
-   cd good-faith
-   ```
+## Technical Notes
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+### Neo4j Integration
+- Use official Neo4j driver for Node.js
+- Implement connection pooling for performance
+- Use parameterized queries to prevent injection
+- Create indexes for frequently accessed properties
 
-3. Ensure Ollama is running with the required models:
-   ```bash
-   ollama pull deepseek-coder:latest
-   ollama pull phi:latest
-   ```
+### LLM Strategy
+- Cache frequently generated questions
+- Use temperature control for consistency
+- Implement retry logic for failed generations
+- Monitor token usage for cost control
 
-4. Create the necessary directories:
-   ```bash
-   mkdir -p data/knowledge-base data/graph data/users
-   ```
-
-5. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-6. Access the application at `http://localhost:3000`
-
-## Technical Implementation Details
-
-### Graph Knowledge Representation
-
-The application uses an in-memory graph structure with serialization/deserialization to JSON for persistence. Key components include:
-
-1. **Node Types**: Different node types (Question, Answer, Framework, etc.) with properties
-2. **Edge Types**: Various relationships between nodes with optional weights
-3. **Graph Traversal**: Customized algorithms for finding paths, contradictions, and similar nodes
-
-```typescript
-// Example of how graph traversal is used for contradiction detection
-const potentialContradictions = knowledgeGraph.findRelatedNodes(
-  currentAnswerNode, 
-  { 
-    relationship: "POTENTIALLY_CONTRADICTS", 
-    maxDepth: 2 
-  }
-);
-```
-
-### Contradiction Detection
-
-Contradictions are detected in three ways:
-
-1. **Explicit Graph Relationships**: Questions can be explicitly linked as potentially contradictory.
-2. **Graph Traversal Analysis**: The system uses path finding to identify semantically related questions.
-3. **LLM Analysis**: The DeepSeek model analyzes potential contradictions to determine if there's a genuine logical inconsistency.
-
-### Stage Progression
-
-Users progress through Kohlberg's stages as follows:
-
-1. Start at Stage 1 (Punishment-Obedience)
-2. Must answer at least 3 questions per stage
-3. Must resolve any contradictions before advancing
-4. Higher stages present more complex moral questions
+### Performance Considerations
+- Lazy loading of graph data
+- Efficient traversal algorithms
+- Optimized contradiction detection queries
+- Session-based caching
 
 ## Future Enhancements
-
-1. **External Graph Database**: Migrate from in-memory to Neo4j or other graph databases
-2. **Enhanced UI**: Develop a more engaging user interface with graph visualization
-3. **Additional Frameworks**: Incorporate more philosophical frameworks beyond the initial set
-4. **Personalized Question Generation**: Generate tailored questions based on user's previous answers and graph positioning
-5. **Social Sharing**: Allow users to share their moral framework analysis
-
-## API Endpoints
-
-### `/api/question`
-
-- **Method**: GET
-- **Query Parameters**:
-  - `userId` (optional): User's ID, a new one is generated if not provided
-- **Response**: Returns the next question for the user
-
-### `/api/answer`
-
-- **Method**: POST
-- **Body**:
-  - `userId`: User's ID
-  - `questionId`: ID of the question being answered
-  - `answer`: User's answer text
-- **Response**: Returns the question and any detected contradictions
-
-### `/api/resolution`
-
-- **Method**: POST
-- **Body**:
-  - `userId`: User's ID
-  - `contradictionId`: ID of the contradiction
-  - `explanation`: User's explanation of the resolution
-  - `overwrittenQuestionId`: ID of the question whose answer will be overwritten
-  - `newAnswer` (optional): New answer if provided
-- **Response**: Returns the resolved contradiction
-
-### `/api/analysis`
-
-- **Method**: GET
-- **Query Parameters**:
-  - `userId`: User's ID
-- **Response**: Returns the analysis of the user's moral framework
+- Multi-language support
+- Cultural context adaptation
+- Collaborative features
+- Advanced visualization tools
+- Mobile application
 
 ## Contributing
-
-Contributions are welcome! Here are some ways you can contribute:
-
-1. Add new philosophical frameworks to the knowledge base
-2. Improve graph algorithms for contradiction detection
-3. Enhance the UI/UX
-4. Add more sophisticated question generation
-5. Implement unit tests
+Contributions welcome! Focus areas:
+1. Question generation algorithms
+2. Contradiction detection logic
+3. Framework analysis improvements
+4. Performance optimizations
 
 ## License
-
-This project is open source and available under the MIT License.
+MIT License
