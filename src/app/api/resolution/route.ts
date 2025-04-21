@@ -1,6 +1,6 @@
 // /app/api/resolution/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { ragSystem } from '@/lib/rag';
+import { ragSystem } from '@/lib/graph';
 
 export async function POST(req: NextRequest) {
   try {

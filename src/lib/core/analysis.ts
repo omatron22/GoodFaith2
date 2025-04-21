@@ -1,6 +1,6 @@
 // /lib/core/analysis.ts
 import { MoralFramework, Question, UserAnswer, UserSession, Contradiction } from '../types';
-import { ollamaClient } from '../rag/ollama';
+import { ollamaClient } from '../graph/ollama';
 import { storageService } from './storage';
 
 /**

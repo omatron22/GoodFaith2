@@ -1,6 +1,6 @@
 // /app/api/analysis/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { ragSystem } from '@/lib/rag';
+import { ragSystem } from '@/lib/graph';
 import { analysisService } from '@/lib/core/analysis';
 import { storageService } from '@/lib/core/storage';
 

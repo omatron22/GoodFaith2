@@ -1,6 +1,6 @@
 // /lib/core/contradictions.ts
 import { Contradiction, Question } from '../types';
-import { ollamaClient } from '../rag/ollama';
+import { ollamaClient } from '../graph/ollama';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
