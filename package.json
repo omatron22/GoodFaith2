@@ -6,14 +6,21 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:init": "ts-node scripts/init-neo4j.ts",
+    "db:test": "ts-node scripts/test-neo4j.ts",
+    "db:clear": "ts-node scripts/init-neo4j.ts --clear",
+    "setup": "npm run db:init && npm run db:test"
   },
   "dependencies": {
+    "dotenv": "^16.5.0",
     "faiss-node": "^0.5.1",
+    "neo4j-driver": "^5.28.1",
     "next": "15.2.4",
     "papaparse": "^5.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "ts-node": "^10.9.2",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
@@ -22,6 +29,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
     "tailwindcss": "^4",
